@@ -1,27 +1,55 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getTopStories, type Story } from "../api/hackerNews";
+import { useQueryMode } from "../context/QueryModeContext";
+
+const STORY_LIMIT = 12;
 
 const HomePage = () => {
+  const { mode } = useQueryMode();
+  const useFetch = mode === "fetch";
+  
   const [stories, setStories] = useState<Story[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(useFetch);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const topStoriesQuery = useQuery({
+    queryKey: ["hackerNews", "topStories", STORY_LIMIT],
+    queryFn: () => getTopStories(STORY_LIMIT),
+    enabled: !useFetch,
+  });
 
   useEffect(() => {
+    if (!useFetch) return;
+
+    let cancelled = false;
+
     async function load() {
       try {
-        setLoading(true);
-        setError(null);
-        const fetchedStories = await getTopStories(12);
-        setStories(fetchedStories);
+        setFetchLoading(true);
+        setFetchError(null);
+        const data = await getTopStories(STORY_LIMIT);
+        if (!cancelled) setStories(data);
       } catch (err) {
-        setError((err as Error).message);
+        if (!cancelled) setFetchError((err as Error).message);
       } finally {
-        setLoading(false);
+        if (!cancelled) setFetchLoading(false);
       }
     }
 
-    load();
-  }, []);
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [useFetch]);
+
+  const loading = useFetch ? fetchLoading : topStoriesQuery.isLoading;
+  const error = useFetch
+    ? fetchError
+    : (topStoriesQuery.error?.message ?? null);
+
+  const list = useFetch ? stories : (topStoriesQuery.data ?? []);
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:px-6 lg:px-8">
@@ -58,7 +86,7 @@ const HomePage = () => {
 
         {!loading && !error && (
           <section className="space-y-3">
-            {stories.map((story, index) => (
+            {list.map((story, index) => (
               <article
                 key={story.id}
                 className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-orange-400/50 hover:bg-slate-900"
