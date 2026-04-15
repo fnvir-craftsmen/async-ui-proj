@@ -85,7 +85,11 @@ const HomePage = () => {
           </section>
         )}
 
-        {!loading && !error && (
+        {!loading && !error && list.length === 0 && (
+          <p className="mt-8 text-slate-400">No stories found.</p>
+        )}
+
+        {!loading && !error && list.length > 0 && (
           <section className="space-y-3">
             {list.map((story, index) => (
               <StoryCard key={story.id} story={story} serial={index + 1} />
