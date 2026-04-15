@@ -6,15 +6,26 @@ import { getTopStories, searchStories, type Story } from "../api/hackerNews";
 import { useQueryMode } from "../context/QueryModeContext";
 
 const STORY_LIMIT = 12;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const HomePage = () => {
   const { mode } = useQueryMode();
   const useFetch = mode === "fetch";
 
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchQuery === null) {
+      setDebouncedQuery(null);
+      return;
+    }
+    const id = window.setTimeout(() => setDebouncedQuery(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchQuery]);
 
   const [stories, setStories] = useState<Story[]>([]);
-  const [fetchLoading, setFetchLoading] = useState(useFetch && searchQuery === null);
+  const [fetchLoading, setFetchLoading] = useState(useFetch && debouncedQuery === null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [hits, setHits] = useState<Story[]>([]);
@@ -24,49 +35,59 @@ const HomePage = () => {
   const topStoriesQuery = useQuery({
     queryKey: ["hackerNews", "topStories", STORY_LIMIT],
     queryFn: () => getTopStories(STORY_LIMIT),
-    enabled: !useFetch && searchQuery === null,
+    enabled: !useFetch && debouncedQuery === null,
   });
 
   const searchResults = useQuery({
-    queryKey: ["hackerNews", "search", searchQuery],
-    queryFn: () => searchStories(searchQuery!),
-    enabled: !useFetch && searchQuery !== null,
+    queryKey: ["hackerNews", "search", debouncedQuery],
+    queryFn: ({ signal }) => searchStories(debouncedQuery!, signal),
+    enabled: !useFetch && debouncedQuery !== null,
   });
 
   useEffect(() => {
     if (!useFetch) return;
 
-    const fetchData = async () => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    const loadingFeed = debouncedQuery === null;
+    let cancelled = false;
+
+    const run = async () => {
       try {
-        if (searchQuery === null) {
+        if (loadingFeed) {
           setFetchLoading(true);
           setFetchError(null);
-          setStories(await getTopStories(STORY_LIMIT));
+          const data = await getTopStories(STORY_LIMIT);
+          if (cancelled) return;
+          setStories(data);
         } else {
           setHitsLoading(true);
           setHitsError(null);
-          setHits(await searchStories(searchQuery));
+          const data = await searchStories(debouncedQuery, signal);
+          if (cancelled) return;
+          setHits(data);
         }
       } catch (err) {
-        const errorMsg = (err as Error).message;
-        if (searchQuery === null) {
-          setFetchError(errorMsg);
-        } else {
-          setHitsError(errorMsg);
-        }
+        if (cancelled) return;
+        if ((err as Error).name === "AbortError") return;
+        const msg = (err as Error).message;
+        if (loadingFeed) setFetchError(msg);
+        else setHitsError(msg);
       } finally {
-        if (searchQuery === null) {
-          setFetchLoading(false);
-        } else {
-          setHitsLoading(false);
-        }
+        if (loadingFeed) setFetchLoading(false);
+        else setHitsLoading(false);
       }
     };
 
-    fetchData();
-  }, [useFetch, searchQuery]);
+    void run();
 
-  const searching = searchQuery !== null;
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [useFetch, debouncedQuery]);
+
+  const searching = debouncedQuery !== null;
 
   let loading: boolean;
   let error: string | null;
@@ -119,7 +140,11 @@ const HomePage = () => {
           <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
             Top Hacker News Stories
           </h1>
-          <SearchBox onSearch={onSearch} onClear={onClear} active={searching} />
+          <SearchBox
+            onSearch={onSearch}
+            onClear={onClear}
+            active={searchQuery !== null}
+          />
         </header>
 
         {loading && (

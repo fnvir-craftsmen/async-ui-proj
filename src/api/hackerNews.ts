@@ -26,13 +26,13 @@ type AlgoliaHit = {
   created_at_i?: number;
 };
 
-export async function searchStories(query: string): Promise<Story[]> {
+export async function searchStories(query: string, signal?: AbortSignal): Promise<Story[]> {
   const q = query.trim();
   if (!q) return [];
 
   const params = new URLSearchParams({ query: q, tags: "story", hitsPerPage: "20" });
 
-  const res = await fetch(`${ALGOLIA_SEARCH}/search?${params}`);
+  const res = await fetch(`${ALGOLIA_SEARCH}/search?${params}`, { signal });
   if (!res.ok)
     throw new Error("Search failed.");
 
