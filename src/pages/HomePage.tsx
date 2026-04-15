@@ -1,11 +1,104 @@
+import { useEffect, useState } from "react";
+import { getTopStories, type Story } from "../api/hackerNews";
+
 const HomePage = () => {
+  const [stories, setStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const fetchedStories = await getTopStories(12);
+        setStories(fetchedStories);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f8fafc] p-8 text-[#0f172a] text-center">
-      <section className="max-w-160">
-        <h1 className="mb-3 text-3xl font-medium">
-          Welcome to Async UI Project
-        </h1>
-      </section>
+    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
+        <header className="mb-8">
+          <p className="text-sm font-medium uppercase tracking-wider text-orange-400">
+            HackerNews Feed
+          </p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+            Top Hacker News Stories
+          </h1>
+        </header>
+
+        {loading && (
+          <section className="space-y-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse rounded-xl border border-slate-800 bg-slate-900/60 p-5"
+              >
+                <div className="h-4 w-3/4 rounded bg-slate-700" />
+                <div className="mt-3 h-3 w-1/2 rounded bg-slate-800" />
+              </div>
+            ))}
+          </section>
+        )}
+
+        {!loading && error && (
+          <section className="rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-red-200">
+            <p className="font-semibold">Could not load stories</p>
+            <p className="mt-1 text-sm text-red-100/90">{error}</p>
+          </section>
+        )}
+
+        {!loading && !error && (
+          <section className="space-y-3">
+            {stories.map((story, index) => (
+              <article
+                key={story.id}
+                className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-orange-400/50 hover:bg-slate-900"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <h2 className="text-base font-semibold leading-snug text-slate-100 sm:text-lg">
+                    <span className="mr-2 text-slate-500">{index + 1}.</span>
+                    {story.url ? (
+                      <a
+                        href={story.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-orange-300"
+                      >
+                        {story.title}
+                      </a>
+                    ) : (
+                      story.title
+                    )}
+                  </h2>
+                  <span className="shrink-0 rounded-md bg-orange-500/15 px-2 py-1 text-xs font-medium text-orange-300">
+                    {story.score} pts
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 sm:text-sm">
+                  <span>by {story.by}</span>
+                  <span>{story.descendants ?? 0} comments</span>
+                  <span>
+                    {new Date(story.time * 1000).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+      </div>
     </main>
   );
 };
