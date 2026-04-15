@@ -14,6 +14,42 @@ export type StoryDetail = Story & {
 };
 
 const BASE_URL = "https://hacker-news.firebaseio.com/v0";
+const ALGOLIA_SEARCH = "https://hn.algolia.com/api/v1";
+
+type AlgoliaHit = {
+  objectID: string;
+  title: string | null;
+  author?: string;
+  points?: number;
+  url?: string | null;
+  num_comments?: number;
+  created_at_i?: number;
+};
+
+export async function searchStories(query: string): Promise<Story[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const params = new URLSearchParams({ query: q, tags: "story", hitsPerPage: "20" });
+
+  const res = await fetch(`${ALGOLIA_SEARCH}/search?${params}`);
+  if (!res.ok)
+    throw new Error("Search failed.");
+
+  const { hits } = (await res.json()) as { hits: AlgoliaHit[] };
+
+  return hits
+    .map((h) => ({
+      id: Number.parseInt(h.objectID, 10),
+      title: h.title as string,
+      by: h.author ?? "unknown",
+      score: h.points ?? 0,
+      url: h.url ?? undefined,
+      descendants: h.num_comments ?? 0,
+      time: h.created_at_i ?? 0,
+    }))
+    .filter((s) => !Number.isNaN(s.id));
+}
 
 export async function getTopStories(limit = 12): Promise<Story[]> {
   const idsRes = await fetch(`${BASE_URL}/topstories.json`);
